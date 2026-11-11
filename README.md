@@ -1,6 +1,7 @@
-# BitmapBench — Cache-Aware Bitmap Indexing Evaluation
+# BitmapBench — Bitmap Index Design and Evaluation
 
-A benchmark and analysis framework evaluating bitmap indexing techniques for database management systems, comparing standard single-component Value-List indexes against multi-component decomposed base encodings (e.g. Base-3 and Base-$\langle 6,3 \rangle$).
+A benchmark and analysis framework evaluating bitmap indexing techniques for database management systems, based on the foundational research paper:
+> **"Bitmap Index Design and Evaluation"** — Chee-Yong Chan and Yannis E. Ioannidis (SIGMOD 1998)
 
 ---
 
@@ -15,82 +16,87 @@ BitmapBench/
 │   └── bitmap.pdf
 │
 ├── code/
-│   ├── equality_encoding_comparison.py
-│   ├── range_encoding_comparison.py
-│   └── plot_comparison_results.py
+│   ├── equality_range_comparison.py     # Main simulation: Equality vs Range Encoding (all 6 query types, Hot/Cold)
+│   ├── equality_encoding_comparison.py  # Equality index decomposition (Base-9 vs Base-3)
+│   ├── range_encoding_comparison.py     # Large-scale decomposed evaluation (Base-18 vs Base-<6,3>)
+│   └── plot_comparison_results.py       # Visualizer for equality decomposition
 │
 ├── results/
-│   ├── index_comparison.png
-│   ├── normal_vs_base63_comparison.png
-│   └── space_time_tradeoff.png
+│   ├── plot1_bitmap_count.png           # Bitmaps: Equality vs Range (Base-18 & Base-<6,3>)
+│   ├── plot2_storage_comparison.png     # Theoretical storage comparison
+│   ├── plot3_query_time_all_types.png   # Query latency across all 6 query types (Hot Cache)
+│   ├── plot4_hot_vs_cold_cache.png      # Side-by-side Hot vs Cold cache latency
+│   ├── plot5_bitmap_operations.png      # Average logical bitmap operations (AND/OR/NOT/Scans)
+│   ├── plot6_space_time_tradeoff.png    # Storage vs query latency Pareto frontier
+│   ├── benchmark_results.csv            # Raw timing benchmarks (Hot & Cold)
+│   ├── operation_counts.csv             # Bitmap operation and scan metrics
+│   ├── space_comparison.csv             # Storage footprint in bits, bytes, KiB, MiB
+│   ├── build_times.csv                  # Index construction durations
+│   ├── index_comparison.png             # Legacy equality plot
+│   ├── normal_vs_base63_comparison.png  # Legacy 5M record plot
+│   └── space_time_tradeoff.png          # Legacy tradeoff plot
 │
 └── .gitignore
 ```
 
 ---
 
-## 🧠 Why Caching Creates Experimental Bias
+## 🧠 Encoding Schemes & The Space-Time Tradeoff
 
-In standard in-memory benchmarks, running the same query in a tight loop introduces severe **caching bias**:
-1. **L1/L2 Cache Pinning**: Operands remain in high-speed CPU caches (1–10 ns access latency), masking memory bus transfer overheads.
-2. **Asymmetric Cache Hits in Decomposed Indexes**: Component bitmaps with smaller cardinalities (e.g., base-3 component in Base-$\langle 6,3 \rangle$) are frequently reused across consecutive queries, artificially inflating their cache hit rate.
-3. **Pointers vs. Compute Overhead**: Single-component bitmap retrievals touch fewer cache lines than multi-component bitwise AND operations.
+From Section 2 of Chan & Ioannidis (SIGMOD 1998):
 
-### The Solution: Dual-Regime Benchmarking (Cold vs. Hot Cache)
-To ensure completely unbiased results, our benchmarking harness evaluates **both** memory regimes:
-- **Cold Cache (DRAM / Memory-Bound)**: Before each query execution, a 32 MiB cache-buster buffer is swept across all 64-byte cache lines, fully displacing cached index bitmaps from L1, L2, and L3/SLC caches. This simulates first-access/ad-hoc query latency directly from DRAM.
-- **Hot Cache (In-Memory / CPU-Bound)**: Queries are warmed up and executed in steady-state, measuring peak CPU bitwise arithmetic throughput without DRAM latency.
+| Feature | Equality Encoding | Range Encoding |
+| :--- | :--- | :--- |
+| **Bitmap Definition** | $B_i[r] = 1 \iff \text{val}(r) = i$ | $B_i[r] = 1 \iff \text{val}(r) \le i$ |
+| **Bitmaps per component ($b$)** | $b$ bitmaps | $b - 1$ bitmaps ($B_{b-1}$ is all-ones, omitted) |
+| **Point Queries ($A = v$)** | Direct single bitmap lookup ($0$ ops) | $B_v \land \neg B_{v-1}$ ($1$ AND, $1$ NOT) |
+| **Range Queries ($A \le v$, $A < v$)** | Cumulative OR of $v$ bitmaps ($O(v)$ ops) | Direct single bitmap lookup ($0$ ops) |
+| **Multi-Component Base-$\langle b_2, b_1 \rangle$** | $b_1 + b_2$ bitmaps | $(b_1 - 1) + (b_2 - 1)$ bitmaps |
 
 ---
 
-## 🔬 Scripts Overview
+## 🔬 Simulations Overview
 
-| File | Description | What It Compares |
+| File | Description | Configurations Tested |
 | :--- | :--- | :--- |
-| [`code/equality_encoding_comparison.py`](code/equality_encoding_comparison.py) | Equality index comparison | Evaluates standard single-component Value-List index vs. Base-3 decomposed index ($N = 500,000$, $C = 9$) across Cold Cache and Hot Cache regimes. |
-| [`code/range_encoding_comparison.py`](code/range_encoding_comparison.py) | Decomposed base index evaluation | Compares Single-component Normal index against two-component decomposed base index (Base-$\langle 6, 3 \rangle$, $N = 5,000,000$, $C = 18$), measuring latency, space-time tradeoffs, and cache sensitivity. |
-| [`code/plot_comparison_results.py`](code/plot_comparison_results.py) | Experimental visualization | Generates comprehensive visual comparisons across Cold vs Hot query times, build performance, and storage savings. |
+| [`code/equality_range_comparison.py`](code/equality_range_comparison.py) | **Full Equality vs. Range Comparison** | 4 configs: Equality Base-18, Equality Base-$\langle 6,3 \rangle$, Range Base-18, Range Base-$\langle 6,3 \rangle$ on $N = 100,000$ records, testing all 6 query types ($<, \le, >, \ge, =, \ne$) under both Hot and Cold cache conditions. |
+| [`code/equality_encoding_comparison.py`](code/equality_encoding_comparison.py) | Equality decomposition | Normal Base-9 vs. Base-3 ($N = 500,000, C = 9$) |
+| [`code/range_encoding_comparison.py`](code/range_encoding_comparison.py) | Large-scale decomposed base | Normal Base-18 vs. Base-$\langle 6,3 \rangle$ ($N = 5,000,000, C = 18$) |
+| [`code/plot_comparison_results.py`](code/plot_comparison_results.py) | Visualizer | Generates multi-panel summary of Base-3 experiment |
 
 ---
 
 ## 🚀 How to Run
 
-### 1. Prerequisites
-Ensure Python 3.10+ and the required packages are installed:
 ```bash
+# 1. Install dependencies
 pip install matplotlib numpy
+
+# 2. Run the main Equality vs Range experiment (generates 6 plots and 4 CSVs)
+python3 code/equality_range_comparison.py
+
+# 3. Output files will be stored in results/
+ls -l results/
 ```
-
-### 2. Running Benchmarks
-Execute any benchmark directly from the project root:
-
-```bash
-# Run equality encoding benchmark (Cold vs Hot)
-python3 code/equality_encoding_comparison.py
-
-# Run range/decomposed encoding benchmark (Cold vs Hot + Space-Time Tradeoff)
-python3 code/range_encoding_comparison.py
-
-# Generate comparison plots
-python3 code/plot_comparison_results.py
-```
-
-Generated plots will be saved directly into [`results/`](results/).
 
 ---
 
-## 📊 Experimental Results
+## 📊 Experimental Results ($N = 100,000$, $C = 18$)
 
-Plots generated from experimental evaluations:
+### Space Footprint
+| Index Configuration | Bitmaps | Storage (KiB) | Storage Reduction |
+| :--- | :---: | :---: | :---: |
+| **Equality Base-18** | 18 | 219.7 KiB | Baseline ($0.0\%$) |
+| **Range Base-18** | 17 | 207.5 KiB | **$5.6\%$ saved** |
+| **Equality Base-$\langle 6,3 \rangle$** | 9 | 109.9 KiB | **$50.0\%$ saved** |
+| **Range Base-$\langle 6,3 \rangle$** | **7** | **85.4 KiB** | **$61.1\%$ saved (Minimal Storage)** |
 
-- **Index Comparison**: [`results/index_comparison.png`](results/index_comparison.png)  
-  *Query latency per value comparing Normal vs. Base-3 across Cold and Hot cache, construction time, and storage footprint.*
-- **Normal vs. Base-$\langle 6,3 \rangle$ Comparison**: [`results/normal_vs_base63_comparison.png`](results/normal_vs_base63_comparison.png)  
-  *Comprehensive 4-panel comparison of Normal (Base-18) vs. Base-$\langle 6,3 \rangle$ on 5,000,000 records, highlighting 50% storage reduction and Cold vs. Hot query latencies.*
-- **Space-Time Tradeoff**: [`results/space_time_tradeoff.png`](results/space_time_tradeoff.png)  
-  *Storage (MiB) vs. Average Query Latency (ms) frontier showing both Cold and Hot Cache operating regimes.*
+### Query Latency & Operation Summary
+- **Equality Queries ($A = v$)**: Equality Base-18 is fastest ($\sim 0.22\ \mu\text{s}$ hot), requiring only $1$ bitmap read and $0$ Boolean operations.
+- **Range Queries ($A < v, A \le v$)**: Range Base-18 is fastest ($\sim 0.26\ \mu\text{s}$ hot), requiring only $1$ bitmap read and $0$ Boolean operations, whereas Equality Base-18 requires averaging $8.5$ OR operations and $9.5$ bitmap scans ($\sim 11.9\ \mu\text{s}$ hot).
+- **Cache Sensitivity**: Point lookups show high cache sensitivity ($5\times$ speedup between cold DRAM fetch and hot L1/L2 cache), while decomposed multi-bitmap operations are compute-bound and maintain consistent latency across cache regimes.
 
 ---
 
 ## 📚 References
-- [`paper/bitmap.pdf`](paper/bitmap.pdf): Reference research paper on bitmap index encoding and decomposition techniques.
+- [`paper/bitmap.pdf`](paper/bitmap.pdf): Chan & Ioannidis, *"Bitmap Index Design and Evaluation"*, ACM SIGMOD 1998.
