@@ -11,17 +11,23 @@ A benchmark and analysis framework evaluating bitmap indexing techniques for dat
 BitmapBench/
 │
 ├── README.md
+├── PHASE1_SIMULATION_REPORT.md         # Comprehensive analysis report & defense guide for Professor
 │
 ├── paper/
-│   └── bitmap.pdf
+│   └── bitmap.pdf                      # Chan & Ioannidis (SIGMOD 1998)
 │
 ├── code/
-│   ├── equality_range_comparison.py     # Main simulation: Equality vs Range Encoding (all 6 query types, Hot/Cold)
-│   ├── equality_encoding_comparison.py  # Equality index decomposition (Base-9 vs Base-3)
-│   ├── range_encoding_comparison.py     # Large-scale decomposed evaluation (Base-18 vs Base-<6,3>)
-│   └── plot_comparison_results.py       # Visualizer for equality decomposition
+│   ├── bitmap_utils.py                 # Core bitmap engine & anti-bias cache benchmarking
+│   ├── s1_rangeeval_algorithms.py      # S1: RangeEval vs RangeEval-Opt (Section 3.1, Table 1, Fig 7)
+│   ├── s2_base_sweep.py                # S2: Base number sweep for C in {50, 100, 1000} (Fig 8a, 8b)
+│   ├── s3_cost_model_validation.py     # S3: Cost model validation for Eqs 1–4 (R² = 0.9997)
+│   ├── s4_global_frontier.py           # S4: Global Space-Time Pareto frontier (Fig 9a, 9b, 9c)
+│   ├── equality_range_comparison.py    # Baseline 4-config benchmark (Hot/Cold)
+│   ├── equality_encoding_comparison.py # Equality decomposition (Base-9 vs Base-3)
+│   ├── range_encoding_comparison.py    # Large-scale decomposed evaluation (Base-18 vs Base-<6,3>)
+│   └── plot_comparison_results.py      # Visualizer for equality decomposition
 │
-├── results/
+├── results/                            # All benchmark plots and CSV outputs
 │   ├── plot1_bitmap_count.png           # Bitmaps: Equality vs Range (Base-18 & Base-<6,3>)
 │   ├── plot2_storage_comparison.png     # Theoretical storage comparison
 │   ├── plot3_query_time_all_types.png   # Query latency across all 6 query types (Hot Cache)
