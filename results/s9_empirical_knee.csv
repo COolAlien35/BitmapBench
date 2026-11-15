@@ -1,0 +1,6 @@
+name,role,bases,n,space_bitmaps,storage_kb,analytical_time,med_hot_us,med_cold_us,leq_us,lt_us,geq_us,gt_us,eq_us,neq_us
+Point A (Space-Opt),point_a,"[2, 2, 2, 2, 2, 2, 2]",7,7,42.72,6.6667,23.80,55.17,21.06,21.10,23.78,23.71,47.80,50.77
+Left Neighbor,left_neighbor,"[4, 5, 5]",3,11,67.14,4.2000,10.46,25.29,7.46,6.42,9.04,10.13,18.43,21.26
+Point C (The Knee),knee,"[10, 10]",2,18,109.86,3.0000,6.18,17.58,3.54,3.55,6.18,6.18,10.68,13.49
+Right Neighbor,right_neighbor,"[25, 4]",2,27,164.79,2.7800,6.19,17.83,3.54,3.56,6.20,6.18,10.66,13.53
+Point D (Time-Opt),point_d,[100],1,99,604.25,1.3200,3.37,11.58,0.72,0.74,3.36,3.38,5.04,7.82

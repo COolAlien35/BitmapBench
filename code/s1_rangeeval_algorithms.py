@@ -58,6 +58,8 @@ def rangeeval_leq(index, bases, v, N, ops):
     Per-component cost (i >= 2): 2 scans, 1 AND, 1 NOT, 1 AND, 1 OR = 4 ops.
     Total: 2n-1 scans, 4(n-1) ops.
     """
+    if v < 0:
+        return 0
     n = len(bases)
     digits = decompose_value(v, bases)
 
@@ -135,6 +137,8 @@ def rangeeval_opt_leq(index, bases, v, N, ops):
     Per-component cost (i >= 2): 2 scans, 1 AND, 1 OR = 2 ops.
     Total: 2n-1 scans, 2(n-1) ops.
     """
+    if v < 0:
+        return 0
     n = len(bases)
     digits = decompose_value(v, bases)
 
