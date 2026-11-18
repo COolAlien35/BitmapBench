@@ -39,12 +39,20 @@ Benchmarking bitwise queries in memory can easily suffer from hardware cache art
 ```
 BitmapBench/
 ├── code/
-│   ├── bitmap_utils.py               # Shared bitmap operations & cache-aware timers
-│   ├── s1_rangeeval_algorithms.py    # Simulation S1 (Section 3.1)
-│   ├── s2_base_sweep.py              # Simulation S2 (Section 3.2 & Figure 8)
-│   ├── s3_cost_model_validation.py   # Simulation S3 (Sections 4 & 5, Equations 1–4)
-│   └── s4_global_frontier.py         # Simulation S4 (Section 5 & Figure 9)
-└── results/                          # 16 generated plots + 7 CSV datasets
+│   ├── common/
+│   │   └── bitmap_utils.py                              # Shared bitmap operations & cache-aware timers
+│   ├── range_eval_algorithms_section3_1/
+│   │   ├── code/rangeeval_vs_rangeeval_opt_benchmark.py # Simulation S1 (Section 3.1)
+│   │   └── results/                                     # Table 1 worst case ops, Fig 7 trace, comparisons
+│   ├── base_number_sweep_section3_2/
+│   │   ├── code/base_decomposition_sweep_simulation.py  # Simulation S2 (Section 3.2 & Figure 8)
+│   │   └── results/                                     # Fig 8a scans, Fig 8b ops, combined sweeps
+│   ├── cost_model_validation_sections4_5/
+│   │   ├── code/analytical_cost_model_validation.py     # Simulation S3 (Sections 4 & 5, Equations 1–4)
+│   │   └── results/                                     # Cost model validation plots & CSVs
+│   └── global_space_time_frontier_section5/
+│       ├── code/global_design_space_frontier_simulation.py # Simulation S4 (Section 5 & Figure 9)
+│       └── results/                                     # Fig 9a, 9b, 9c frontiers, dominance proof
 ```
 
 ---

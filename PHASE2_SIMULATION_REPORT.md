@@ -53,12 +53,21 @@ Phase 2 combines rigorous analytical theorem-proving with hardware cache-control
 ```
 BitmapBench/
 ├── code/
-│   ├── s5_extremal_points.py          # Simulation S5 (Theorem 6.1 & Monotonicity)
-│   ├── s6_three_class_comparison.py   # Simulation S6 (Figures 10 & 11 Reproduction)
-│   ├── s7_pareto_knee.py              # Simulation S7 (Gradient Analysis & Knee Detection)
-│   ├── s8_knee_formula.py             # Simulation S8 (Theorem 7.1 Analytical Validation)
-│   └── s9_knee_empirical.py           # Simulation S9 (Empirical Physical Benchmarks)
-└── results/                           # 18 generated plots + 7 CSV datasets
+│   ├── extremal_indexes_section6/
+│   │   ├── code/extremal_points_and_monotonicity_simulation.py # Simulation S5 (Theorem 6.1 & Monotonicity)
+│   │   └── results/                                            # Space/time monotonicity, extremal points
+│   ├── three_class_tradeoff_section7/
+│   │   ├── code/three_class_tradeoff_simulation.py             # Simulation S6 (Figures 10 & 11 Reproduction)
+│   │   └── results/                                            # Fig 10, Fig 11, envelope proof, gradient arrows
+│   ├── pareto_knee_detection_section7/
+│   │   ├── code/pareto_knee_gradient_analysis_simulation.py    # Simulation S7 (Gradient Analysis & Knee Detection)
+│   │   └── results/                                            # Knee C=100, gradient bars, sensitivity
+│   ├── analytical_knee_formula_section7/
+│   │   ├── code/analytical_knee_formula_verification.py        # Simulation S8 (Theorem 7.1 Analytical Validation)
+│   │   └── results/                                            # Knee formula sweep, delta distribution
+│   └── empirical_knee_benchmark_section7/
+│       ├── code/empirical_knee_physical_query_benchmark.py     # Simulation S9 (Empirical Physical Benchmarks)
+│       └── results/                                            # Elbow visualization, latency by query type
 ```
 
 ---

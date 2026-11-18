@@ -1,0 +1,1 @@
+# Common bitmap utilities package
