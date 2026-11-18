@@ -1050,56 +1050,108 @@ plt.close(fig5)
 print(f"  Plot 5 → {p5}")
 
 
-# ----- PLOT 6: Space vs Query-Time Tradeoff -----
-fig6, ax6 = plt.subplots(figsize=(10, 7))
+# ----- PLOT 6: Space vs Query-Time Tradeoff & Pareto Frontier -----
+fig6, ax6 = plt.subplots(figsize=(11, 7.5))
 
-# For each config, plot storage vs average query time across all query types
-markers = ['o', 's', '^', 'D']
-for i, cfg in enumerate(configs):
-    storage = space_data[i]['KiB']
+color_map = {
+    "Eq Base-18": "#4C72B0",
+    "Eq Base-<6,3>": "#55A868",
+    "Rng Base-18": "#C44E52",
+    "Rng Base-<6,3>": "#DD8452"
+}
+bitmaps_map = {
+    "Eq Base-18": C,
+    "Eq Base-<6,3>": BASES_DECOMPOSED[0] + BASES_DECOMPOSED[1],
+    "Rng Base-18": C - 1,
+    "Rng Base-<6,3>": (BASES_DECOMPOSED[0] - 1) + (BASES_DECOMPOSED[1] - 1)
+}
 
-    hot_avg = statistics.mean([r['median_hot_us'] for r in bench_results if r['config'] == cfg])
-    cold_avg = statistics.mean([r['median_cold_us'] for r in bench_results if r['config'] == cfg])
-
-    ax6.scatter(storage, hot_avg, marker=markers[i], s=120, color=colors[i],
-                edgecolors='black', linewidth=0.8, zorder=5)
-    ax6.scatter(storage, cold_avg, marker=markers[i], s=120, color=colors[i],
-                edgecolors='black', linewidth=0.8, zorder=5, alpha=0.5)
-
-    # Label hot
-    ax6.annotate(f"{cfg}\n(Hot: {hot_avg:.1f} µs)",
-                 (storage, hot_avg), textcoords="offset points",
-                 xytext=(10, 8), fontsize=8.5)
-    # Label cold
-    ax6.annotate(f"{cfg}\n(Cold: {cold_avg:.1f} µs)",
-                 (storage, cold_avg), textcoords="offset points",
-                 xytext=(10, -18), fontsize=8.5, alpha=0.7)
-
-# Draw connecting lines
+plot6_data = {}
 for i, cfg in enumerate(configs):
     storage = space_data[i]['KiB']
     hot_avg = statistics.mean([r['median_hot_us'] for r in bench_results if r['config'] == cfg])
     cold_avg = statistics.mean([r['median_cold_us'] for r in bench_results if r['config'] == cfg])
-    ax6.plot([storage, storage], [hot_avg, cold_avg], '--', color=colors[i], alpha=0.5, linewidth=1)
+    plot6_data[cfg] = {
+        'storage': storage,
+        'hot': hot_avg,
+        'cold': cold_avg,
+        'bitmaps': bitmaps_map[cfg]
+    }
 
-ax6.set_title("Space vs Query-Time Tradeoff\n(All Index Configurations, Hot & Cold Cache)",
-              fontsize=13, fontweight='bold')
-ax6.set_xlabel("Index Storage (KiB)", fontsize=11)
-ax6.set_ylabel("Average Query Latency (µs, median across all query types)", fontsize=11)
+# Plot vertical dashed connecting lines and points (Hot = circle, Cold = square)
+for cfg in configs:
+    d = plot6_data[cfg]
+    c = color_map[cfg]
+    ax6.plot([d['storage'], d['storage']], [d['hot'], d['cold']],
+             color=c, linestyle='--', linewidth=2.0, alpha=0.7, zorder=2)
+    ax6.scatter(d['storage'], d['hot'], color=c, s=150, edgecolors='black',
+                linewidth=1.2, zorder=4, marker='o')
+    ax6.scatter(d['storage'], d['cold'], color=c, s=150, edgecolors='black',
+                linewidth=1.2, zorder=4, marker='s', alpha=0.6)
+
+# Draw Pareto Optimal Frontier (Hot Cache) connecting optimal tradeoff designs:
+# Rng Base-<6,3> (minimum storage) -> Rng Base-18 (fastest overall latency)
+ax6.plot([plot6_data['Rng Base-<6,3>']['storage'], plot6_data['Rng Base-18']['storage']],
+         [plot6_data['Rng Base-<6,3>']['hot'], plot6_data['Rng Base-18']['hot']],
+         color='#C44E52', linestyle='-', linewidth=2.2, alpha=0.85, zorder=3,
+         label='Pareto Optimal Frontier (Hot Cache)')
+
+# Strategically positioned, non-overlapping annotations with styled callout boxes
+# 1. Rng Base-<6,3> (Leftmost point: minimal storage)
+d = plot6_data['Rng Base-<6,3>']
+ax6.annotate(f"Rng Base-<6,3> ({d['bitmaps']} bitmaps)\nHot: {d['hot']:.2f} µs | Cold: {d['cold']:.2f} µs\n(★ Minimal Storage: -61.1%)",
+             xy=(d['storage'], (d['hot'] + d['cold'])/2),
+             xytext=(-15, 35), textcoords='offset points',
+             ha='right', va='bottom', fontsize=9.5, fontweight='bold',
+             bbox=dict(boxstyle='round,pad=0.4', facecolor='#FFF5EB', edgecolor='#DD8452', alpha=0.95),
+             arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=-0.1', color='#DD8452', lw=1.2))
+
+# 2. Eq Base-<6,3> (Upper-middle point)
+d = plot6_data['Eq Base-<6,3>']
+ax6.annotate(f"Eq Base-<6,3> ({d['bitmaps']} bitmaps)\nHot: {d['hot']:.2f} µs | Cold: {d['cold']:.2f} µs\n(Dominated by Rng Base-<6,3>)",
+             xy=(d['storage'], (d['hot'] + d['cold'])/2),
+             xytext=(25, 15), textcoords='offset points',
+             ha='left', va='bottom', fontsize=9.5, fontweight='bold',
+             bbox=dict(boxstyle='round,pad=0.4', facecolor='#F0F9F1', edgecolor='#55A868', alpha=0.95),
+             arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0.1', color='#55A868', lw=1.2))
+
+# 3. Rng Base-18 (Lower-right point: fastest overall queries)
+d = plot6_data['Rng Base-18']
+ax6.annotate(f"Rng Base-18 ({d['bitmaps']} bitmaps)\nHot: {d['hot']:.2f} µs | Cold: {d['cold']:.2f} µs\n(★ Fastest Overall Queries)",
+             xy=(d['storage'], (d['hot'] + d['cold'])/2),
+             xytext=(-35, -45), textcoords='offset points',
+             ha='right', va='top', fontsize=9.5, fontweight='bold',
+             bbox=dict(boxstyle='round,pad=0.4', facecolor='#FDF0F0', edgecolor='#C44E52', alpha=0.95),
+             arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0.15', color='#C44E52', lw=1.2))
+
+# 4. Eq Base-18 (Rightmost point)
+d = plot6_data['Eq Base-18']
+ax6.annotate(f"Eq Base-18 ({d['bitmaps']} bitmaps)\nHot: {d['hot']:.2f} µs | Cold: {d['cold']:.2f} µs\n(Dominated by Rng Base-18)",
+             xy=(d['storage'], (d['hot'] + d['cold'])/2),
+             xytext=(25, 20), textcoords='offset points',
+             ha='left', va='bottom', fontsize=9.5, fontweight='bold',
+             bbox=dict(boxstyle='round,pad=0.4', facecolor='#EFF4FB', edgecolor='#4C72B0', alpha=0.95),
+             arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=-0.1', color='#4C72B0', lw=1.2))
+
+ax6.set_title("Plot 6: Space vs. Query-Time Tradeoff & Pareto Frontier\n(Storage vs. Average Query Latency across All 6 Query Types)",
+              fontsize=13, fontweight='bold', pad=15)
+ax6.set_xlabel("Index Storage Footprint (KiB)  [Lower is Better →]", fontsize=11, fontweight='bold')
+ax6.set_ylabel("Average Query Latency (µs)  [Lower is Better ↑]", fontsize=11, fontweight='bold')
+
+ax6.set_xlim(55, 265)
+ax6.set_ylim(1, 25)
 ax6.grid(True, linestyle='--', alpha=0.4)
 
-# Custom legend
 from matplotlib.lines import Line2D
 legend_elements = [
-    Line2D([0], [0], marker=markers[i], color=colors[i], label=configs[i],
-           markersize=8, linestyle='None') for i in range(4)
-] + [
-    Line2D([0], [0], marker='o', color='black', label='Solid = Hot Cache',
-           markersize=8, linestyle='None'),
-    Line2D([0], [0], marker='o', color='gray', label='Faded = Cold Cache',
-           markersize=8, linestyle='None', alpha=0.5),
+    Line2D([0], [0], marker='o', color='black', label='Hot Cache (Primed L1/L2)',
+           markersize=9, linestyle='None'),
+    Line2D([0], [0], marker='s', color='gray', label='Cold Cache (32 MiB Evicted)',
+           markersize=9, linestyle='None', alpha=0.7),
+    Line2D([0], [0], color='#C44E52', linestyle='-', lw=2, label='Pareto Frontier (Optimal Tradeoff)'),
+    Line2D([0], [0], color='gray', linestyle='--', lw=1.5, label='Vertical Dash: Cache Sensitivity (Δ Latency)')
 ]
-ax6.legend(handles=legend_elements, fontsize=9, loc='upper right')
+ax6.legend(handles=legend_elements, fontsize=9.5, loc='upper center', framealpha=0.95)
 
 plt.tight_layout()
 p6 = os.path.join(RESULTS_DIR, 'plot6_space_time_tradeoff.png')
