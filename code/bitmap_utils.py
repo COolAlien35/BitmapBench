@@ -8,8 +8,8 @@ Canonical implementation is located in `code/common/bitmap_utils.py`.
 import os
 import sys
 
-COMMON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'common')
-if COMMON_DIR not in sys.path:
-    sys.path.insert(0, COMMON_DIR)
+_common_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'common')
+if _common_dir not in sys.path:
+    sys.path.insert(0, _common_dir)
 
-from bitmap_utils import *
+from common.bitmap_utils import *

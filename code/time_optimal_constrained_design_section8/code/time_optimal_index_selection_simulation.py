@@ -26,7 +26,8 @@ import os
 import random
 import statistics
 import sys
-import os
+import time as time_mod
+from functools import lru_cache
 
 # Setup environment and directories
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -41,23 +42,11 @@ COMMON_DIR = os.path.join(CODE_ROOT, 'common')
 if COMMON_DIR not in sys.path:
     sys.path.insert(0, COMMON_DIR)
 
-import time as time_mod
-from functools import lru_cache
-
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-# ---------------------------------------------------------------------------
-# PATH SETUP
-# ---------------------------------------------------------------------------
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CODE_DIR = os.path.normpath(os.path.join(SCRIPT_DIR, '..'))
-RESULTS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'results'))
-os.makedirs( exist_ok=True)
-
-sys.path.insert(0, CODE_DIR)
 from bitmap_utils import (
     OpCounter, all_ones, build_range_ncomp, decompose_value,
     get_range_leq_bitmap, ground_truth_query,
@@ -208,6 +197,20 @@ def time_opt_alg_paper(M, C):
     return best_b, best_t, space_of(best_b)
 
 
+def min_space_to_cover(needed, rr, min_b):
+    """Theorem 6.1: Minimum space needed by rr components each >= min_b to cover product needed."""
+    if needed <= 1:
+        return rr * (min_b - 1)
+    if min_b ** rr >= needed:
+        return rr * (min_b - 1)
+    b = max(min_b, math.ceil(needed ** (1.0 / rr)))
+    if b - 1 >= min_b:
+        for tau in range(1, rr + 1):
+            if (b ** tau) * ((b - 1) ** (rr - tau)) >= needed:
+                return tau * (b - 1) + (rr - tau) * (b - 2)
+    return rr * (b - 1)
+
+
 def _search_k_component(k, M, C, prune_time, current, depth, space_used,
                         prod_so_far, results):
     """Branch-and-bound search for k-component bases with strong pruning.
@@ -244,11 +247,9 @@ def _search_k_component(k, M, C, prune_time, current, depth, space_used,
         # Pruning 1: Can remaining-1 components cover C/new_prod?
         rr = remaining - 1
         needed = math.ceil(C / new_prod) if new_prod > 0 and C > new_prod else 1
-        if needed > 1:
-            min_base_for_rest = max(b, math.ceil(needed ** (1.0 / rr)))
-            min_space_for_rest = rr * (min_base_for_rest - 1)
-            if min_space_for_rest > leftover_space:
-                continue  # Impossible
+        min_space_for_rest = min_space_to_cover(needed, rr, b)
+        if min_space_for_rest > leftover_space:
+            continue  # Impossible
 
         # Pruning 2: Optimistic lower bound on Time
         sum_inv_so_far = sum(1.0 / x for x in current) + 1.0 / b
@@ -317,22 +318,24 @@ def refine_index(bases, C):
         seq.remove(bp)
         if bp > 2 and len(seq) > 0:
             bq = min(seq)
+            seq.remove(bq)
             other_prod = prod // (bp * bq)
-            C_prime = math.ceil(C / other_prod) if other_prod > 0 else C
-            disc = (bq + bp) ** 2 - 4 * C_prime
+            # Exact Figure 15 formula: (bp + bq)**2 - (4 * bp * bq * C) / prod
+            disc = (bp + bq) ** 2 - (4.0 * bp * bq * C) / prod
             if disc >= 0:
                 delta = int(math.floor((bp - bq + math.sqrt(disc)) / 2.0))
-                if 0 < delta <= bp - 2:
-                    prod = other_prod * (bp - delta) * (bq + delta)
-                    bp = bp - delta
-                    bq = bq + delta
-            seq.remove(min(seq))
+                if delta > 0:
+                    delta = min(delta, bp - 2)
+                    while delta > 0 and other_prod * (bp - delta) * (bq + delta) < C:
+                        delta -= 1
+                    if delta > 0:
+                        prod = other_prod * (bp - delta) * (bq + delta)
+                        bp = bp - delta
+                        bq = bq + delta
             seq.append(bq)
         b_prime[i - 1] = bp
 
-    rest_prod = 1
-    for i in range(1, n):
-        rest_prod *= b_prime[i]
+    rest_prod = product_of(b_prime[1:])
     b_prime[0] = max(2, math.ceil(C / rest_prod))
     return sorted(b_prime)
 
@@ -473,6 +476,18 @@ def run_empirical_benchmark(C=100, N=100_000, budgets=None):
             print(f"    {label}: bases={bases}, Space={sp}, Time(theory)={theory_time:.3f}")
             idx = build_range_ncomp(data, bases, N)
 
+            # Explicit correctness verification against ground truth across all 6 operators
+            verify_sample_vals = [0, C // 4, C // 2, 3 * C // 4, C - 1]
+            for v_chk in verify_sample_vals:
+                for qt in QUERY_TYPES:
+                    actual_bm = rangeeval_opt_query(idx, bases, v_chk, N, qt)
+                    expected_bm = ground_truth_query(data, N, qt, v_chk)
+                    assert actual_bm == expected_bm, (
+                        f"Correctness failure: {label} index with bases={bases}, "
+                        f"op='{qt}', value={v_chk}"
+                    )
+            print(f"      ✓ Correctness verified: rangeeval_opt matches ground truth across all 6 operators")
+
             # Count ops
             total_ops = OpCounter()
             qcount = 0
@@ -568,7 +583,7 @@ def plot1_heuristic_accuracy(table2):
                   fontsize=13, fontweight='bold')
     ax1.grid(axis='y', linestyle='--', alpha=0.3)
     plt.tight_layout()
-    path = os.path.join( 'figure13_heuristic_accuracy_and_scan_difference.png')
+    path = os.path.join(RESULTS_DIR, 'figure13_heuristic_accuracy_and_scan_difference.png')
     plt.savefig(path, dpi=200, bbox_inches='tight')
     plt.close()
     print(f"  Plot 1 → {path}")
@@ -615,7 +630,7 @@ def plot2_time_vs_space_budget(C_list=None):
     ax.legend(fontsize=10, loc='upper right')
     ax.grid(True, linestyle='--', alpha=0.35)
     plt.tight_layout()
-    path = os.path.join( 'figure14_query_time_vs_space_budget_tradeoff.png')
+    path = os.path.join(RESULTS_DIR, 'figure14_query_time_vs_space_budget_tradeoff.png')
     plt.savefig(path, dpi=200, bbox_inches='tight')
     plt.close()
     print(f"  Plot 2 → {path}")
@@ -662,7 +677,7 @@ def plot3_opt_vs_heur_scatter(table2):
     fig.suptitle('Optimal vs Heuristic Scatter (above diagonal = suboptimal heuristic)',
                  fontsize=13, fontweight='bold', y=1.02)
     plt.tight_layout()
-    path = os.path.join( 'optimal_vs_heuristic_cost_scatter.png')
+    path = os.path.join(RESULTS_DIR, 'optimal_vs_heuristic_cost_scatter.png')
     plt.savefig(path, dpi=200, bbox_inches='tight')
     plt.close()
     print(f"  Plot 3 → {path}")
@@ -677,27 +692,39 @@ def plot4_solver_scalability():
     for C in test_C:
         M = max(math.ceil(math.log2(C)), int(C * 0.3))
 
-        t0 = time_mod.perf_counter()
-        time_opt_alg(M, C)
-        t_opt = (time_mod.perf_counter() - t0) * 1000
+        # Warmup and repeated runs to eliminate timing jitter
+        for _ in range(5):
+            time_opt_alg(M, C)
+
+        n_runs = 30 if C <= 500 else 15
+        opt_samples = []
+        for _ in range(n_runs):
+            t0 = time_mod.perf_counter()
+            time_opt_alg(M, C)
+            opt_samples.append((time_mod.perf_counter() - t0) * 1000.0)
+        t_opt = statistics.median(opt_samples)
+
+        for _ in range(10):
+            time_opt_heur(M, C)
 
         t0 = time_mod.perf_counter()
-        for _ in range(1000):
+        n_heur_runs = 1000
+        for _ in range(n_heur_runs):
             time_opt_heur(M, C)
-        t_heur_per = (time_mod.perf_counter() - t0)  # ms per 1000 runs → per run
+        t_heur_per = (time_mod.perf_counter() - t0) * 1000.0 / n_heur_runs  # ms per run
 
         opt_ms.append(t_opt)
         heur_ms.append(t_heur_per)
         print(f"    C={C:>5d}  M={M:>4d}  Opt={t_opt:>10.3f}ms  Heur={t_heur_per:>8.4f}ms")
 
     ax.plot(test_C, opt_ms, 'o-', color=CLR['opt'], linewidth=2.5, markersize=8,
-            label='TimeOptAlg (Exact)')
+            label='TimeOptAlg (Exact Branch-and-Bound)')
     ax.plot(test_C, heur_ms, 's--', color=CLR['heur'], linewidth=2.5, markersize=8,
             label='TimeOptHeur (Heuristic)')
     ax.set_yscale('log')
     ax.set_xlabel('Attribute Cardinality (C)', fontsize=12)
     ax.set_ylabel('Solver Execution Time (ms, log scale)', fontsize=12)
-    ax.set_title('Solver Scalability: Exact DP vs Heuristic\n'
+    ax.set_title('Solver Scalability: Exact Branch-and-Bound vs Heuristic\n'
                  '(Space budget M = 0.3 × C)', fontsize=13, fontweight='bold')
     ax.legend(fontsize=11)
     ax.grid(True, which='both', linestyle='--', alpha=0.3)
@@ -711,7 +738,7 @@ def plot4_solver_scalability():
                             fontsize=9, color=CLR['opt'], fontweight='bold')
 
     plt.tight_layout()
-    path = os.path.join( 'branch_and_bound_vs_heuristic_scalability.png')
+    path = os.path.join(RESULTS_DIR, 'branch_and_bound_vs_heuristic_scalability.png')
     plt.savefig(path, dpi=200, bbox_inches='tight')
     plt.close()
     print(f"  Plot 4 → {path}")
@@ -753,7 +780,7 @@ def plot5_empirical_vs_theory(bench):
     fig.suptitle('Empirical Validation: Query Latency vs Theoretical Scans\n'
                  '(C=100, N=100,000)', fontsize=13, fontweight='bold', y=1.02)
     plt.tight_layout()
-    path = os.path.join( 'physical_query_latency_vs_theoretical_cost.png')
+    path = os.path.join(RESULTS_DIR, 'physical_query_latency_vs_theoretical_cost.png')
     plt.savefig(path, dpi=200, bbox_inches='tight')
     plt.close()
     print(f"  Plot 5 → {path}")
@@ -779,7 +806,7 @@ def print_table2(table2):
 
 
 def export_table2_csv(table2):
-    path = os.path.join( 'table2_optimal_vs_heuristic_reproduction.csv')
+    path = os.path.join(RESULTS_DIR, 'table2_optimal_vs_heuristic_reproduction.csv')
     with open(path, 'w', newline='') as f:
         w = csv.writer(f)
         w.writerow(['C', 'pct_optimal', 'max_scan_diff', 'avg_scan_diff',
@@ -853,7 +880,7 @@ def main():
     print("=" * 78)
     print("\n  Generated files:")
     for f in sorted(os.listdir(RESULTS_DIR)):
-        fp = os.path.join( f)
+        fp = os.path.join(RESULTS_DIR, f)
         print(f"    {f:45s}  {os.path.getsize(fp):>8,} bytes")
 
 
